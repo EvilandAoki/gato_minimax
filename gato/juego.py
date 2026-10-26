@@ -10,15 +10,19 @@ from .minimax import alfabeta, minimax
 from .tablero import (aplicar, dibujar, esta_lleno, ganador, movimientos_validos,
                       oponente, tablero_vacio, turno)
 
+# Profundidad máxima que se guarda del árbol con el tablero vacío (si no, ~550 mil nodos).
 PROF_ARBOL_VACIO = 3   # con 9 casillas libres el árbol (549.946 nodos) no se guarda entero
+# Carpeta donde [e] exportar guarda los árboles en .txt.
 CARPETA_EXPORT = Path(__file__).resolve().parent.parent / "arboles"
 
 
 def _miles(n):
+    """12345 -> '12.345'."""
     return f"{n:,}".replace(",", ".")
 
 
 def _pedir_jugada(tablero, humano):
+    """Pide una casilla libre al humano. Devuelve 1-9, o None si escribe q. Lo llama jugar()."""
     libres = movimientos_validos(tablero)
     while True:
         r = pedir(f"Tu jugada ({color(humano, 'negrita')}) — casilla {libres} o [q] salir: ").lower()
@@ -30,7 +34,11 @@ def _pedir_jugada(tablero, humano):
 
 
 def _explicar_ia(tablero, ia, jugada_previa=None):
-    """Hace pensar a la IA, muestra su razonamiento y devuelve (jugada, resultado, ab)."""
+    """Hace pensar a la IA, muestra su razonamiento y devuelve el Resultado de minimax.
+
+    Corre Minimax puro (guardando el árbol) y alfa-beta (sin árbol) solo para comparar
+    cuántos nodos se habría ahorrado. La jugada que se juega es la de Minimax.
+    Lo llama jugar() en cada turno de la máquina."""
     prof_arbol = PROF_ARBOL_VACIO if len(movimientos_validos(tablero)) == 9 else None
     t0 = time.perf_counter()
     res = minimax(tablero, ia, construir_arbol=True, prof_arbol=prof_arbol)
@@ -51,7 +59,7 @@ def _explicar_ia(tablero, ia, jugada_previa=None):
 
 
 def _menu_razonamiento(res, tablero, ia):
-    """Opciones tras la jugada de la IA. Devuelve cuando el usuario continúa."""
+    """Opciones tras la jugada de la IA (ver árbol, exportar, animar). Lo llama jugar()."""
     truncado = contar_nodos(res.raiz) < res.nodos   # el árbol no se guardó completo
     while True:
         opciones = ["[Enter] continuar", "[a] ver árbol", "[e] exportar árbol"]
@@ -88,6 +96,7 @@ def _menu_razonamiento(res, tablero, ia):
 
 
 def jugar():
+    """Bucle de la partida (opción 1 del menú): alterna humano / IA hasta que termine."""
     limpiar()
     titulo("Gato contra la máquina (Minimax)")
     print("X siempre empieza. Si juegas con X, empiezas tú.\n")

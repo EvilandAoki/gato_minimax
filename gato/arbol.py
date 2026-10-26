@@ -8,21 +8,27 @@ from .tablero import dibujar_mini, ganador
 
 @dataclass(slots=True)
 class Nodo:
+    """Un nodo del árbol de búsqueda. Lo crea minimax._evaluar y lo lee el dibujo/animación.
+
+    Un nodo = una posición del tablero alcanzada tras una jugada concreta.
+    """
     tablero: tuple
     movimiento: int | None      # jugada que llevó a este nodo (None en la raíz)
     turno: str                  # jugador al que le toca mover en este nodo
     profundidad: int
-    tipo: str = ""              # 'MAX', 'MIN' o 'HOJA'
-    valor: int | None = None
+    tipo: str = ""              # 'MAX', 'MIN', 'HOJA' (terminal) o 'PODA' (no evaluado)
+    valor: int | None = None    # valor minimax que este nodo "sube" a su padre
     hijos: list = field(default_factory=list)
     elegido: int | None = None  # jugada hija con mejor valor
     podado: bool = False        # rama descartada por alfa-beta (nunca se evaluó)
-    alfa: float | None = None
-    beta: float | None = None
+    alfa: float | None = None   # α al terminar el nodo (solo con poda; si no, None)
+    beta: float | None = None   # β al terminar el nodo (solo con poda; si no, None)
     sub: int = 0                # nodos evaluados en su subárbol (incluyéndose)
 
 
 def contar_nodos(raiz):
+    """Cuenta nodos guardados. juego._menu_razonamiento lo compara con res.nodos para saber
+    si el árbol quedó truncado."""
     """Nodos evaluados guardados en el árbol (las ramas podadas no cuentan)."""
     if raiz.podado:
         return 0
@@ -30,6 +36,7 @@ def contar_nodos(raiz):
 
 
 def _fmt_valor(v):
+    """Formatea un valor: +3, -2, 0, +∞, -∞ o ? (sin calcular)."""
     if v is None:
         return "?"
     if v in (float("inf"), float("-inf")):
@@ -38,6 +45,7 @@ def _fmt_valor(v):
 
 
 def _etiqueta(n):
+    """(tipo, texto extra) de un nodo: las hojas dicen quién ganó o 'empate'."""
     if n.tipo == "HOJA":
         g = ganador(n.tablero)
         return "HOJA", f"gana {g}" if g else "empate"
@@ -58,6 +66,7 @@ def imprimir_arbol(raiz, prof_max=2, solo_mejor=False, visible=None, valores=Non
     animando = valores is not None
 
     def linea(n):
+        """Texto de una sola línea para el nodo `n`."""
         if n.podado:
             ab = ""
             if n.alfa is not None:
@@ -75,6 +84,7 @@ def imprimir_arbol(raiz, prof_max=2, solo_mejor=False, visible=None, valores=Non
         return "  ".join(partes)
 
     def hijos_visibles(n, en_pv):
+        """Filtra los hijos a dibujar (por `visible` y/o por solo_mejor)."""
         hs = n.hijos
         if visible is not None:
             hs = [h for h in hs if id(h) in visible]
@@ -83,6 +93,7 @@ def imprimir_arbol(raiz, prof_max=2, solo_mejor=False, visible=None, valores=Non
         return hs
 
     def rec(n, prefijo, ultimo, es_raiz, en_pv):
+        """Dibuja `n` y baja a sus hijos. en_pv = 'estoy en la variante principal' (rama verde)."""
         resaltado = en_pv and not animando and not n.podado and not es_raiz
         if resaltado or actual is n:
             # Una sola capa de color: los colores internos cortarían el resaltado.

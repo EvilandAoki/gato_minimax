@@ -13,6 +13,7 @@ from .animacion import EJEMPLOS
 
 @dataclass
 class EstadisticasArbol:
+    """Contadores del recorrido completo del árbol (índice de las listas = profundidad)."""
     nodos_por_prof: list = field(default_factory=lambda: [0] * 10)
     terminales_por_prof: list = field(default_factory=lambda: [0] * 10)
     victorias: dict = field(default_factory=lambda: {"X": 0, "O": 0, "empate": 0})
@@ -20,10 +21,12 @@ class EstadisticasArbol:
 
     @property
     def nodos(self):
+        """Total de nodos de todos los niveles."""
         return sum(self.nodos_por_prof)
 
     @property
     def terminales(self):
+        """Total de partidas terminadas (hojas)."""
         return sum(self.terminales_por_prof)
 
 
@@ -33,6 +36,7 @@ def enumerar_arbol_completo(tablero=None):
     tablero = tablero if tablero is not None else tablero_vacio()
 
     def rec(t, jugador, prof):
+        """Visita `t`, lo cuenta y baja por cada jugada legal (sin utilidades ni poda)."""
         est.nodos_por_prof[prof] += 1
         est.posiciones.add(t)
         g = ganador(t)
@@ -48,10 +52,12 @@ def enumerar_arbol_completo(tablero=None):
 
 
 def _miles(n):
+    """12345 -> '12.345'."""
     return f"{n:,}".replace(",", ".")
 
 
 def mostrar_estadisticas():
+    """Opción 3 del menú: tabla de nodos por nivel y valor de cada primera jugada."""
     titulo("Árbol completo del gato (tablero vacío)")
     print("Recorriendo las 9 jugadas posibles en cada nivel... (unos segundos)\n")
     t0 = time.perf_counter()
@@ -86,6 +92,7 @@ def mostrar_estadisticas():
     print(f"\nTodas valen 0: con juego perfecto de ambos lados el gato SIEMPRE termina en empate. ({dt:.2f} s)")
 
 
+# Posiciones sobre las que comparar() mide Minimax contra alfa-beta.
 POSICIONES_COMPARACION = [
     ("Tablero vacío (mueve X)", tablero_vacio()),
     ("X en esquina (mueve O)", desde_texto("X........")),
@@ -97,6 +104,7 @@ POSICIONES_COMPARACION = [
 
 
 def comparar():
+    """Opción 4 del menú: corre ambos algoritmos en cada posición y compara nodos y tiempo."""
     titulo("Minimax vs. poda alfa-beta")
     cab = (f"  {'posición':<32} {'Minimax':>9} {'Alfa-beta':>10} {'ahorro':>7}  "
            f"{'t mm':>7} {'t ab':>7}  {'jugada':>6}")

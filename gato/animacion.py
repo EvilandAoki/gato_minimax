@@ -16,15 +16,21 @@ EJEMPLOS = {
 
 
 def _fmt(v):
+    """Formatea un valor (+3, -2, 0, ±∞) para los mensajes."""
     if v in (float("inf"), float("-inf")):
         return "+∞" if v > 0 else "-∞"
     return f"{v:+d}" if v else "0"
 
 
 def _grabar(tablero, usar_poda):
+    """Ejecuta la búsqueda COMPLETA de antemano, guardando cada evento que emite el callback.
+
+    La animación no calcula nada en vivo: solo reproduce esta lista. Cada evento es
+    (nombre, nodo, valor, alfa, beta) con nombre en entrar / hoja / subir / poda."""
     eventos = []
 
     def cb(evento, nodo, valor=None, alfa=None, beta=None):
+        """Lo llama minimax._evaluar en cada evento; solo lo anota."""
         eventos.append((evento, nodo, valor, alfa, beta))
 
     algoritmo = alfabeta if usar_poda else minimax
@@ -33,6 +39,7 @@ def _grabar(tablero, usar_poda):
 
 
 def _explicar(evento, nodo, valor, alfa, beta, valores, usar_poda):
+    """Frase en español que describe el evento actual (qué hace el algoritmo en este paso)."""
     ab = f"   (α={_fmt(alfa)}, β={_fmt(beta)})" if usar_poda else ""
     if evento == "entrar":
         mov = f"jugada {nodo.movimiento}" if nodo.movimiento else "raíz"
@@ -60,7 +67,11 @@ def _explicar(evento, nodo, valor, alfa, beta, valores, usar_poda):
 
 
 def animar(tablero, usar_poda=False, retardo=0.35):
-    """Reproduce la búsqueda desde `tablero` evento por evento."""
+    """Reproduce la búsqueda desde `tablero` evento por evento.
+
+    visible = ids de nodos ya descubiertos; valores = id -> valor ya calculado.
+    Ambos crecen con cada evento y se pasan a imprimir_arbol para dibujar el estado actual.
+    Lo llaman menu_animacion() y juego._menu_razonamiento."""
     resultado, eventos = _grabar(tablero, usar_poda)
     raiz = resultado.raiz
     nombre = "Minimax con poda alfa-beta" if usar_poda else "Minimax"
@@ -107,6 +118,7 @@ def animar(tablero, usar_poda=False, retardo=0.35):
 
 
 def _final(raiz, tablero, resultado, nombre, usar_poda):
+    """Pantalla de cierre: árbol completo, nodos evaluados y mejor jugada."""
     limpiar()
     titulo(f"{nombre} — árbol final")
     print(f"Posición inicial: {dibujar_mini(tablero)}\n")
@@ -117,6 +129,7 @@ def _final(raiz, tablero, resultado, nombre, usar_poda):
 
 
 def menu_animacion():
+    """Opción 2 del menú: elegir ejemplo y algoritmo, y lanzar animar()."""
     print()
     print("Elige una posición de ejemplo (pocas casillas libres para ver todo el árbol):")
     for clave, (desc, t) in EJEMPLOS.items():
@@ -131,5 +144,5 @@ def menu_animacion():
 
 
 def puede_animar(tablero):
-    """Una posición es animable si queda poco por explorar."""
+    """Una posición es animable si queda poco por explorar (1-5 casillas libres)."""
     return 0 < len(movimientos_validos(tablero)) <= 5

@@ -16,6 +16,7 @@ MENU = """
 
 
 def main():
+    """Bucle del menú: cada opción llama a una función de otro módulo (ver `acciones`)."""
     acciones = {"1": jugar, "2": menu_animacion, "3": mostrar_estadisticas, "4": comparar}
     titulo("GATO + MINIMAX")
     try:

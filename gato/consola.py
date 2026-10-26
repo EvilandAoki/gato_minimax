@@ -4,8 +4,10 @@ import os
 import sys
 from contextlib import contextmanager
 
+# Los colores solo se usan en una terminal real y si no existe la variable NO_COLOR.
 USAR_COLOR = sys.stdout.isatty() and "NO_COLOR" not in os.environ
 
+# Nombre de estilo -> código ANSI.
 _CODIGOS = {
     "negrita": "1",
     "rojo": "31",
@@ -23,6 +25,7 @@ class Salir(Exception):
 
 
 def color(texto, *estilos):
+    """Envuelve `texto` en códigos ANSI (o lo devuelve igual si los colores están apagados)."""
     if not USAR_COLOR or not estilos:
         return str(texto)
     codigos = ";".join(_CODIGOS[e] for e in estilos)
@@ -42,16 +45,19 @@ def sin_color():
 
 
 def limpiar():
+    """Borra la pantalla (solo en terminal). La animación lo usa en cada paso."""
     if sys.stdout.isatty():
         print("\033[2J\033[H", end="")
 
 
 def titulo(texto):
+    """Imprime un recuadro con el título de una pantalla."""
     linea = "═" * (len(texto) + 4)
     print(color(f"\n╔{linea}╗\n║  {texto}  ║\n╚{linea}╝", "negrita", "cian"))
 
 
 def pedir(mensaje=""):
+    """input() que quita espacios y convierte Ctrl+D en Salir (lo atrapa main.main)."""
     try:
         return input(mensaje).strip()
     except EOFError:
