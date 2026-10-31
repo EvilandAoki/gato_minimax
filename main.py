@@ -6,6 +6,7 @@ from gato.consola import Salir, color, pedir, titulo
 from gato.estadisticas import comparar, mostrar_estadisticas
 from gato.juego import jugar
 from gato.solitario import menu_movil
+from gato.torneo import menu_torneo
 
 MENU = """
   Gato contra la máquina (Minimax con poda alfa-beta)
@@ -17,20 +18,23 @@ MENU = """
   Gato en movimiento (un agente: DFS, BFS, costo uniforme, A*)
     5. Resolver un caso y comparar algoritmos
 
-    6. Salir
+  Competencias entre algoritmos
+    6. Torneo de gato y competencia de búsqueda
+
+    7. Salir
 """
 
 
 def main():
     """Bucle del menú: cada opción llama a una función de otro módulo (ver `acciones`)."""
     acciones = {"1": jugar, "2": menu_animacion, "3": mostrar_estadisticas, "4": comparar,
-                "5": menu_movil}
+                "5": menu_movil, "6": menu_torneo}
     titulo("GATO + MINIMAX")
     try:
         while True:
             print(MENU)
             opcion = pedir("Elige una opción: ")
-            if opcion == "6":
+            if opcion == "7":
                 break
             accion = acciones.get(opcion)
             if accion is None:

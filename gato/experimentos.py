@@ -9,6 +9,7 @@ import time
 from .busqueda import ALGORITMOS, astar, medir
 from .minimax import alfabeta, minimax
 from .movil import CASOS
+from .torneo import COMPETIDORES, PESOS, competencia_busqueda, torneo_gato
 from .tablero import desde_texto, tablero_vacio
 
 ORDEN = ["DFS", "BFS", "UCS", "A*"]
@@ -65,6 +66,27 @@ def tabla_minimax():
                   f"{(t1 - t0) * 1000:.1f} | {(t2 - t1) * 1000:.1f} |")
 
 
+def tabla_torneo():
+    """Ranking del torneo de gato (todos contra todos, 10 aperturas por pareja, ambos colores)."""
+    res = torneo_gato(partidas=10, semilla=1)
+    print("| # | Jugador | Partidas | Ganadas | Empatadas | Perdidas | Puntos | % |")
+    print("|---:|---|---:|---:|---:|---:|---:|---:|")
+    for pos, n in enumerate(res.ranking(), 1):
+        print(f"| {pos} | {n} | {res.partidas(n)} | {res.ganadas[n]} | {res.empatadas[n]} | "
+              f"{res.perdidas[n]} | {res.puntos(n):.1f} | "
+              f"{100 * res.puntos(n) / res.partidas(n):.1f} % |")
+
+
+def tabla_competencia_busqueda():
+    """Puntos por criterio y total de la competencia DFS / BFS / UCS / A* (h1) / A* (h2)."""
+    comp = competencia_busqueda()
+    print("| Competidor | " + " | ".join(f"{c} (×{w})" for c, w in PESOS.items()) + " | Total |")
+    print("|---|" + "---:|" * (len(PESOS) + 1))
+    for n in sorted(COMPETIDORES, key=lambda n: -comp["total"][n]):
+        print(f"| {n} | " + " | ".join(str(comp["criterios"][c][n]) for c in PESOS)
+              + f" | {comp['total'][n]} de {comp['maximo']} |")
+
+
 def main():
     print("## Búsqueda en el Gato en movimiento\n")
     tabla_busqueda()
@@ -72,6 +94,10 @@ def main():
     tabla_heuristicas()
     print("\n## Minimax con y sin poda alfa-beta\n")
     tabla_minimax()
+    print("\n## Torneo de gato (todos contra todos)\n")
+    tabla_torneo()
+    print("\n## Competencia de búsqueda\n")
+    tabla_competencia_busqueda()
 
 
 if __name__ == "__main__":

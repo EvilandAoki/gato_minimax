@@ -47,15 +47,16 @@ class _Ctx:
     (los enteros normales no se pueden "compartir" entre llamadas; un atributo sí).
     `__slots__` solo ahorra memoria/tiempo de acceso; no cambia la lógica.
     """
-    __slots__ = ("construir", "prof_arbol", "poda", "callback", "nodos", "prof_max")
+    __slots__ = ("construir", "prof_arbol", "poda", "callback", "nodos", "prof_max", "evaluador")
 
-    def __init__(self, construir, prof_arbol, poda, callback, prof_max=99):
+    def __init__(self, construir, prof_arbol, poda, callback, prof_max=99, evaluador=None):
         self.construir = construir    # ¿guardar los nodos en un árbol de objetos Nodo?
         self.prof_arbol = prof_arbol  # profundidad máxima hasta la que se guardan nodos
         self.poda = poda              # True = alfa-beta, False = minimax puro
         self.callback = callback      # función a avisar en cada evento (o None)
         self.nodos = 0                # cuántos nodos se han evaluado hasta ahora
-        self.prof_max = prof_max      # profundidad límite: al llegar se usa evaluacion()
+        self.prof_max = prof_max      # profundidad límite: al llegar se usa el evaluador
+        self.evaluador = evaluador or evaluacion   # función (tablero, ia) -> valor en (-1, 1)
 
 
 def utilidad(gana, jugador_ia, profundidad):
@@ -127,7 +128,7 @@ def _evaluar(t, ia, jugador, prof, alfa, beta, nodo, ctx):
 
     # --- Corte por profundidad: no se baja más; se estima el valor con evaluacion() ---
     if prof >= ctx.prof_max:
-        v = evaluacion(t, ia)
+        v = ctx.evaluador(t, ia)
         if nodo is not None:
             nodo.tipo, nodo.valor, nodo.sub = "CORTE", v, 1
             if cb:
@@ -195,11 +196,12 @@ def _evaluar(t, ia, jugador, prof, alfa, beta, nodo, ctx):
     return mejor
 
 
-def _buscar(tablero, jugador_ia, poda, construir_arbol, callback, prof_arbol, prof_max):
+def _buscar(tablero, jugador_ia, poda, construir_arbol, callback, prof_arbol, prof_max,
+            evaluador):
     """Prepara la búsqueda y lanza _evaluar() sobre la raíz. Lo usan minimax y alfabeta."""
     ia = jugador_ia or turno_de(tablero)    # por defecto MAX = a quien le toca mover
     ctx = _Ctx(construir_arbol, prof_arbol if prof_arbol is not None else 99, poda, callback,
-               prof_max if prof_max is not None else 99)
+               prof_max if prof_max is not None else 99, evaluador)
     # La raíz siempre existe (guarda la jugada elegida); sus hijos solo si construir_arbol.
     raiz = Nodo(tablero, None, turno_de(tablero), 0)
     # Arranque: alfa = -inf, beta = +inf ("todavía no sé nada, todo me sirve").
@@ -208,24 +210,28 @@ def _buscar(tablero, jugador_ia, poda, construir_arbol, callback, prof_arbol, pr
 
 
 def minimax(tablero, jugador_ia=None, construir_arbol=True, callback=None, prof_arbol=None,
-            prof_max=None):
+            prof_max=None, evaluador=None):
     """Minimax puro. `jugador_ia` es quien mueve en la raíz (MAX); por defecto, el del turno.
 
     prof_arbol limita hasta qué profundidad se *guardan* nodos (la búsqueda sigue completa).
     prof_max es la profundidad límite de la búsqueda (None = hasta el final de la partida).
+    evaluador es la función de evaluación de los cortes (None = `evaluacion`); debe devolver
+    valores con |valor| < 1. La usa gato/torneo.py para enfrentar evaluaciones distintas.
     Lo llaman: juego._explicar_ia, animacion._grabar, estadisticas.comparar.
     """
-    return _buscar(tablero, jugador_ia, False, construir_arbol, callback, prof_arbol, prof_max)
+    return _buscar(tablero, jugador_ia, False, construir_arbol, callback, prof_arbol, prof_max,
+                   evaluador)
 
 
 def alfabeta(tablero, jugador_ia=None, construir_arbol=True, callback=None, prof_arbol=None,
-             prof_max=None):
+             prof_max=None, evaluador=None):
     """Minimax con poda alfa-beta: misma jugada, menos nodos.
 
     Lo llaman: juego._explicar_ia (solo para comparar nodos), animacion._grabar y
     estadisticas.comparar.
     """
-    return _buscar(tablero, jugador_ia, True, construir_arbol, callback, prof_arbol, prof_max)
+    return _buscar(tablero, jugador_ia, True, construir_arbol, callback, prof_arbol, prof_max,
+                   evaluador)
 
 
 def valores_por_movimiento(tablero, jugador_ia=None):

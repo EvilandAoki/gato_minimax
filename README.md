@@ -16,7 +16,7 @@ Solo Python 3.12 o superior y la biblioteca estándar (no hay que instalar nada)
 
 ```bash
 python3 main.py                  # menú principal
-python3 -m unittest              # pruebas (36, ≈ 12 s)
+python3 -m unittest              # pruebas (45, ≈ 20 s)
 python3 -m gato.experimentos     # tablas de resultados del informe (Markdown)
 ```
 
@@ -39,6 +39,7 @@ juego**. Incluye además la **poda alfa-beta** para comparar cuánto trabajo se 
 | 3. Estadísticas | Enumera el árbol **completo** del gato: nodos por nivel, partidas posibles, victorias/empates. |
 | 4. Comparar | Minimax vs. alfa-beta en varias posiciones, y el árbol podado con sus ramas descartadas (`✂`). |
 | 5. Gato en movimiento | Elegir un caso y DFS / BFS / costo uniforme / A\*; muestra solución, costo, pasos, nodos expandidos, memoria y tiempo; compara los 4 algoritmos y las heurísticas de A\*. |
+| 6. Torneo | Competencias: torneo de gato entre jugadores Minimax con distinta profundidad y evaluación, y competencia puntuada entre DFS, BFS, UCS y A\*. |
 
 ---
 
@@ -236,10 +237,12 @@ gato/
   movil.py              problema "Gato en movimiento": estados, acciones, costos, meta, heurísticas
   busqueda.py           DFS, BFS, costo uniforme y A* (genéricos) + medición de tiempo y memoria
   solitario.py          interfaz de consola del Gato en movimiento
+  torneo.py             torneo de gato y competencia de búsqueda (opción 6)
   experimentos.py       genera las tablas del informe
   consola.py            colores ANSI, entrada, pantalla
 tests/test_minimax.py   23 pruebas de Minimax, alfa-beta y profundidad límite
 tests/test_busqueda.py  13 pruebas de DFS/BFS/UCS/A* y de las heurísticas
+tests/test_torneo.py    9 pruebas del torneo y de la competencia de búsqueda
 arboles/                árboles exportados desde el juego (se crea al exportar)
 ```
 
@@ -290,3 +293,55 @@ Así la evaluación siempre queda en (−1, 1) y nunca supera una victoria o der
 (que valen al menos 1 en valor absoluto). La poda alfa-beta funciona igual con el límite y da la
 misma jugada que Minimax en cada profundidad (hay pruebas para esto). `python3 -m gato.experimentos`
 muestra los nodos con y sin poda para varias profundidades.
+
+## 10. Competencias entre algoritmos (opción 6)
+
+El torneo enfrenta 7 jugadores de máquina todos contra todos: un aleatorio (referencia),
+alfa-beta con profundidad 1, 2, 3 y completa (9), y dos con una evaluación alternativa "posicional"
+(centro +3, esquinas +1) a profundidad 2 y 3. Minimax y alfa-beta **no** compiten entre sí: dan la misma
+jugada, solo empatarían; por eso todos usan alfa-beta y lo que compite es la profundidad y la evaluación.
+
+Para que no se repita la misma partida (los jugadores son deterministas) cada pareja juega 10
+**aperturas aleatorias de 2 jugadas**, y cada apertura se juega **dos veces, con cada jugador como X**.
+Victoria = 1 punto, empate = 0,5. Los resultados salen de `python3 -m gato.experimentos` con semilla 1
+(reproducibles):
+
+| # | Jugador | Ganadas | Empatadas | Perdidas | % de puntos |
+|---:|---|---:|---:|---:|---:|
+| 1 | Prof 9 (completo) | 48 | 52 | 20 | 61,7 % |
+| 2 | Prof 3 posicional | 53 | 40 | 27 | 60,8 % |
+| 3 | Prof 3 | 53 | 39 | 28 | 60,4 % |
+| 4 | Prof 2 | 45 | 46 | 29 | 56,7 % |
+| 5 | Prof 1 | 41 | 49 | 30 | 54,6 % |
+| 6 | Prof 2 posicional | 32 | 55 | 33 | 49,6 % |
+| 7 | Aleatorio | 2 | 11 | 107 | 6,2 % |
+
+**Cómo leerlo (con honestidad):**
+- El **aleatorio queda último con claridad** (6 %): lo único que se afirma con seguridad.
+- La profundidad completa queda primera, pero **por poco** frente a profundidad 3 (61,7 % contra 60,4 %). Con 120 partidas por jugador
+  esa diferencia está dentro del ruido; más aperturas o más semillas la afinarían. Lo que sí se ve es una tendencia: más profundidad, más puntos.
+- **El jugador perfecto pierde partidas (20).** No es un error: las 2 primeras jugadas son aleatorias y no las juega nadie, así que a veces
+  dejan a su color en una posición ya perdida. Como cada apertura se juega con ambos colores, el efecto es parejo.
+- A profundidad 2 la evaluación **por líneas** (56,7 %) supera a la **posicional** (49,6 %); a profundidad 3 son casi iguales
+  (60,4 % contra 60,8 %). La evaluación importa más cuanto menos se ve del árbol.
+
+### Competencia de búsqueda
+Aquí "ganar" depende de qué se mida, así que se puntúa cada criterio por caso (el mejor recibe 4 puntos, el peor 0;
+los empates comparten puntos) y se suman con pesos: **costo de la solución ×3**, nodos expandidos ×1, memoria ×1, tiempo ×1.
+Se pesa más el costo porque una solución rápida pero 20 veces más cara no es mejor. Competidores: DFS, BFS, UCS, A\* con h1 y A\* con h2.
+
+| Competidor | costo (×3) | expandidos | memoria | tiempo | Total (máx. 96) |
+|---|---:|---:|---:|---:|---:|
+| A\* (h1) | 16 | 15 | 15 | 0 | **78** |
+| BFS | 13 | 9 | 9 | 13 | 70 |
+| A\* (h2) | 16 | 5 | 7 | 9 | 69 |
+| UCS | 16 | 0 | 0 | 4 | 52 |
+| DFS | 0 | 12 | 9 | 14 | 35 |
+
+Campeón con estos pesos: **A\* (h1)**. Pero **no es el mejor en todo** y el resultado depende de los pesos:
+UCS, A\* (h1) y A\* (h2) empatan en costo (todos óptimos); A\* (h1) gana en nodos y memoria; **DFS gana en tiempo**
+(y es último en costo); y A\* (h1) saca **0 puntos en tiempo** (su heurística es cara de calcular). Si el tiempo pesara mucho,
+BFS o A\* (h2) pasarían adelante. Es una buena demostración de que la elección del algoritmo es un compromiso.
+
+**Código:** `gato/torneo.py` (`torneo_gato`, `competencia_busqueda`, `menu_torneo`). `minimax()` y `alfabeta()` aceptan el
+parámetro `evaluador` (por defecto `evaluacion`) para poder enfrentar evaluaciones distintas. Pruebas: `tests/test_torneo.py`.
