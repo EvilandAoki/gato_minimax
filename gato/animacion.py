@@ -50,6 +50,9 @@ def _explicar(evento, nodo, valor, alfa, beta, valores, usar_poda):
         quien = f"gana {g}" if g else "empate (tablero lleno)"
         return (f"Estado terminal: {quien}. Utilidad = {_fmt(valor)} "
                 f"(profundidad {nodo.profundidad}).")
+    if evento == "corte":
+        return (f"Profundidad límite ({nodo.profundidad}): no se baja más. "
+                f"Valor estimado por la función de evaluación = {valor:+.2f}.")
     if evento == "subir":
         hijos = [valores[id(h)] for h in nodo.hijos if id(h) in valores and not h.podado]
         lista = ", ".join(_fmt(x) for x in hijos)
@@ -83,7 +86,7 @@ def animar(tablero, usar_poda=False, retardo=0.35):
     for i, (evento, nodo, valor, alfa, beta) in enumerate(eventos, 1):
         if evento == "entrar":
             visible.add(id(nodo))
-        elif evento in ("hoja", "subir"):
+        elif evento in ("hoja", "corte", "subir"):
             valores[id(nodo)] = valor
         elif evento == "poda":
             visible.update(id(h) for h in nodo.hijos if h.podado)

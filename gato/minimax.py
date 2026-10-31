@@ -8,6 +8,9 @@ Utilidad (desde el punto de vista de la IA, que es MAX):
     gana el rival  ->  profundidad - 10   (mientras más tarde pierda, mejor)
     empate         ->  0
 
+Profundidad límite: con `prof_max` la búsqueda se corta al llegar a esa profundidad y el nodo
+se valora con `evaluacion()` (una estimación) en vez de seguir hasta el final de la partida.
+
 Quién llama a quién:
     juego.py / animacion.py / estadisticas.py
         -> minimax() o alfabeta()      (API pública, solo cambia el flag `poda`)
@@ -19,8 +22,8 @@ Quién llama a quién:
 from typing import NamedTuple
 
 from .arbol import Nodo
-from .tablero import (aplicar, esta_lleno, ganador, movimientos_validos, oponente,
-                      turno as turno_de)
+from .tablero import (LINEAS_GANADORAS, aplicar, esta_lleno, ganador, movimientos_validos,
+                      oponente, turno as turno_de)
 
 # Infinito: valor inicial de alfa (-INF) y beta (+INF). Cualquier utilidad real (-10..10)
 # lo supera, así que la primera hoja que se evalúe siempre "mejora" a alfa o beta.
@@ -30,7 +33,7 @@ INF = float("inf")
 class Resultado(NamedTuple):
     """Lo que devuelven minimax() y alfabeta(). Es una tupla con nombres."""
     mejor_mov: int | None
-    valor: int
+    valor: float          # entero si la búsqueda llegó a estados terminales; decimal si hubo cortes
     nodos: int            # nodos evaluados (sin contar ramas podadas)
     raiz: Nodo | None     # árbol de búsqueda (None si construir_arbol=False)
 
@@ -44,14 +47,15 @@ class _Ctx:
     (los enteros normales no se pueden "compartir" entre llamadas; un atributo sí).
     `__slots__` solo ahorra memoria/tiempo de acceso; no cambia la lógica.
     """
-    __slots__ = ("construir", "prof_arbol", "poda", "callback", "nodos")
+    __slots__ = ("construir", "prof_arbol", "poda", "callback", "nodos", "prof_max")
 
-    def __init__(self, construir, prof_arbol, poda, callback):
+    def __init__(self, construir, prof_arbol, poda, callback, prof_max=99):
         self.construir = construir    # ¿guardar los nodos en un árbol de objetos Nodo?
         self.prof_arbol = prof_arbol  # profundidad máxima hasta la que se guardan nodos
         self.poda = poda              # True = alfa-beta, False = minimax puro
         self.callback = callback      # función a avisar en cada evento (o None)
         self.nodos = 0                # cuántos nodos se han evaluado hasta ahora
+        self.prof_max = prof_max      # profundidad límite: al llegar se usa evaluacion()
 
 
 def utilidad(gana, jugador_ia, profundidad):
@@ -65,6 +69,32 @@ def utilidad(gana, jugador_ia, profundidad):
     return 10 - profundidad if gana == jugador_ia else profundidad - 10
 
 
+def evaluacion(t, ia):
+    """Estimación de un tablero NO terminal, desde el punto de vista de la IA (en (-1, 1)).
+
+    Se usa cuando la búsqueda se corta por profundidad. Revisa las 8 líneas ganadoras:
+        línea solo con fichas de la IA     +1 (una ficha)  o  +10 (dos fichas)
+        línea solo con fichas del rival    -1 (una ficha)  o  -10 (dos fichas)
+        línea con fichas de ambos          0  (ya nadie puede completarla)
+        casilla central de la IA           +1
+    El total (entre -80 y +81) se divide entre 100: así |evaluacion| < 1 y NUNCA vale más que
+    una victoria o derrota real (que valen al menos 1 en valor absoluto). Se llama desde
+    _evaluar() solo al llegar a la profundidad límite.
+    """
+    rival = oponente(ia)
+    total = 0
+    for linea in LINEAS_GANADORAS:
+        mias = sum(1 for i in linea if t[i] == ia)
+        suyas = sum(1 for i in linea if t[i] == rival)
+        if suyas == 0 and mias:
+            total += 10 if mias == 2 else 1
+        elif mias == 0 and suyas:
+            total -= 10 if suyas == 2 else 1
+    if t[4] == ia:
+        total += 1
+    return total / 100
+
+
 def _evaluar(t, ia, jugador, prof, alfa, beta, nodo, ctx):
     """Corazón del algoritmo. Devuelve el valor minimax del tablero `t`.
 
@@ -72,7 +102,7 @@ def _evaluar(t, ia, jugador, prof, alfa, beta, nodo, ctx):
         t        tablero actual (tupla de 9 celdas)
         ia       ficha de la IA; es MAX durante TODA la búsqueda (no cambia al recursar)
         jugador  ficha a la que le toca mover en `t` (alterna X/O en cada nivel)
-        prof     profundidad: jugadas hechas desde la raíz (raíz = 0)
+        prof     profundidad: jugadas hechas desde la raíz (raíz = 0); con ctx.prof_max se corta ahí
         alfa     mejor valor que MAX ya tiene asegurado en el camino hacia la raíz
         beta     mejor valor que MIN ya tiene asegurado en el camino hacia la raíz
         nodo     objeto Nodo donde anotar los resultados (None si no se guarda el árbol)
@@ -93,6 +123,16 @@ def _evaluar(t, ia, jugador, prof, alfa, beta, nodo, ctx):
             if cb:
                 cb("entrar", nodo, alfa=alfa, beta=beta)
                 cb("hoja", nodo, valor=v, alfa=alfa, beta=beta)
+        return v
+
+    # --- Corte por profundidad: no se baja más; se estima el valor con evaluacion() ---
+    if prof >= ctx.prof_max:
+        v = evaluacion(t, ia)
+        if nodo is not None:
+            nodo.tipo, nodo.valor, nodo.sub = "CORTE", v, 1
+            if cb:
+                cb("entrar", nodo, alfa=alfa, beta=beta)
+                cb("corte", nodo, valor=v, alfa=alfa, beta=beta)
         return v
 
     # --- Nodo interno: ¿maximiza (turno de la IA) o minimiza (turno del rival)? ---
@@ -155,10 +195,11 @@ def _evaluar(t, ia, jugador, prof, alfa, beta, nodo, ctx):
     return mejor
 
 
-def _buscar(tablero, jugador_ia, poda, construir_arbol, callback, prof_arbol):
+def _buscar(tablero, jugador_ia, poda, construir_arbol, callback, prof_arbol, prof_max):
     """Prepara la búsqueda y lanza _evaluar() sobre la raíz. Lo usan minimax y alfabeta."""
     ia = jugador_ia or turno_de(tablero)    # por defecto MAX = a quien le toca mover
-    ctx = _Ctx(construir_arbol, prof_arbol if prof_arbol is not None else 99, poda, callback)
+    ctx = _Ctx(construir_arbol, prof_arbol if prof_arbol is not None else 99, poda, callback,
+               prof_max if prof_max is not None else 99)
     # La raíz siempre existe (guarda la jugada elegida); sus hijos solo si construir_arbol.
     raiz = Nodo(tablero, None, turno_de(tablero), 0)
     # Arranque: alfa = -inf, beta = +inf ("todavía no sé nada, todo me sirve").
@@ -166,22 +207,25 @@ def _buscar(tablero, jugador_ia, poda, construir_arbol, callback, prof_arbol):
     return Resultado(raiz.elegido, valor, ctx.nodos, raiz if construir_arbol else None)
 
 
-def minimax(tablero, jugador_ia=None, construir_arbol=True, callback=None, prof_arbol=None):
+def minimax(tablero, jugador_ia=None, construir_arbol=True, callback=None, prof_arbol=None,
+            prof_max=None):
     """Minimax puro. `jugador_ia` es quien mueve en la raíz (MAX); por defecto, el del turno.
 
     prof_arbol limita hasta qué profundidad se *guardan* nodos (la búsqueda sigue completa).
+    prof_max es la profundidad límite de la búsqueda (None = hasta el final de la partida).
     Lo llaman: juego._explicar_ia, animacion._grabar, estadisticas.comparar.
     """
-    return _buscar(tablero, jugador_ia, False, construir_arbol, callback, prof_arbol)
+    return _buscar(tablero, jugador_ia, False, construir_arbol, callback, prof_arbol, prof_max)
 
 
-def alfabeta(tablero, jugador_ia=None, construir_arbol=True, callback=None, prof_arbol=None):
+def alfabeta(tablero, jugador_ia=None, construir_arbol=True, callback=None, prof_arbol=None,
+             prof_max=None):
     """Minimax con poda alfa-beta: misma jugada, menos nodos.
 
     Lo llaman: juego._explicar_ia (solo para comparar nodos), animacion._grabar y
     estadisticas.comparar.
     """
-    return _buscar(tablero, jugador_ia, True, construir_arbol, callback, prof_arbol)
+    return _buscar(tablero, jugador_ia, True, construir_arbol, callback, prof_arbol, prof_max)
 
 
 def valores_por_movimiento(tablero, jugador_ia=None):

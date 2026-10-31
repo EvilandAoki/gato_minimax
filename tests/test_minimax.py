@@ -2,7 +2,7 @@ import unittest
 
 from gato.arbol import contar_nodos
 from gato.estadisticas import POSICIONES_COMPARACION, enumerar_arbol_completo
-from gato.minimax import alfabeta, minimax, valores_por_movimiento
+from gato.minimax import alfabeta, evaluacion, minimax, valores_por_movimiento
 from gato.tablero import (LINEAS_GANADORAS, aplicar, desde_texto, esta_lleno, ganador,
                           movimientos_validos, oponente, tablero_vacio, turno)
 
@@ -153,3 +153,54 @@ class TestLaIANuncaPierde(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestProfundidadLimite(unittest.TestCase):
+    def test_evaluacion_nunca_supera_una_victoria(self):
+        # En todas las posiciones no terminales alcanzables: |evaluacion| < 1.
+        vistas = set()
+
+        def rec(t):
+            if t in vistas or ganador(t) or esta_lleno(t):
+                return
+            vistas.add(t)
+            for ia in "XO":
+                self.assertLess(abs(evaluacion(t, ia)), 1, t)
+            for m in movimientos_validos(t):
+                rec(aplicar(t, m, turno(t)))
+
+        rec(tablero_vacio())
+
+    def test_evaluacion_prefiere_centro_y_dobles(self):
+        self.assertGreater(evaluacion(desde_texto("....X...."), "X"), 0)
+        self.assertLess(evaluacion(desde_texto("....X...."), "O"), 0)
+        # Dos fichas en una línea abierta valen más que una sola.
+        self.assertGreater(evaluacion(desde_texto("XX.O.O..."), "X"),
+                           evaluacion(desde_texto("X..O.O..."), "X"))
+
+    def test_none_equivale_a_profundidad_9(self):
+        t = desde_texto("XOX/.O./.X.")
+        a, b = minimax(t, construir_arbol=False), minimax(t, construir_arbol=False, prof_max=9)
+        self.assertEqual((a.mejor_mov, a.valor, a.nodos), (b.mejor_mov, b.valor, b.nodos))
+
+    def test_alfabeta_igual_que_minimax_en_cada_profundidad(self):
+        for t, maxima in ((desde_texto("XOX/.O./.X."), 9), (desde_texto("X........"), 6),
+                          (tablero_vacio(), 5)):
+            for d in range(1, maxima + 1):
+                a = minimax(t, construir_arbol=False, prof_max=d)
+                b = alfabeta(t, construir_arbol=False, prof_max=d)
+                self.assertEqual((a.mejor_mov, a.valor), (b.mejor_mov, b.valor), (t, d))
+                self.assertLessEqual(b.nodos, a.nodos)
+
+    def test_limite_reduce_nodos_y_marca_cortes(self):
+        t = tablero_vacio()
+        r = minimax(t, prof_max=3)
+        self.assertEqual(r.nodos, 1 + 9 + 72 + 504)
+        self.assertEqual(contar_nodos(r.raiz), r.nodos)
+        tipos = {h.tipo for h in r.raiz.hijos[0].hijos[0].hijos}
+        self.assertEqual(tipos, {"CORTE"})
+
+    def test_con_limite_no_deja_ganar_en_una_jugada(self):
+        # Aun a profundidad 2 bloquea (ve su jugada y la respuesta del rival).
+        t = desde_texto("XX./.O./...")
+        self.assertEqual(minimax(t, "O", construir_arbol=False, prof_max=2).mejor_mov, 3)

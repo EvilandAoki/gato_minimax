@@ -1,15 +1,34 @@
-# Gato (3 en línea) con Minimax
+# Gato (3 en línea): algoritmos de búsqueda (Proyecto 1, IA)
 
-Mini proyecto de Inteligencia Artificial: un juego de gato en la terminal contra una máquina que
-decide con el algoritmo **Minimax**, y que **muestra su razonamiento modelándolo como un árbol de
-juego**. Incluye además la **poda alfa-beta** para comparar cuánto trabajo se ahorra.
+**Integrantes:** _(completar: nombre y código de cada integrante, máximo 3)_
+**Curso / docente:** _(completar)_
 
-Solo usa la biblioteca estándar de Python 3.12 (sin instalar nada).
+Todo el proyecto gira alrededor del gato y cubre los cinco algoritmos pedidos:
+
+| Modo | Problema | Algoritmos |
+|---|---|---|
+| **Gato en movimiento** (un agente) | Mover fichas X por el tablero hasta formar una línea, con costos distintos | DFS, BFS, costo uniforme, A\* (heurística propia) |
+| **Gato contra la máquina** (adversario) | Juego normal de gato, dos jugadores por turnos | Minimax con poda alfa-beta, profundidad límite y función de evaluación |
+
+## Requisitos y ejecución
+
+Solo Python 3.12 o superior y la biblioteca estándar (no hay que instalar nada).
 
 ```bash
-python3 main.py              # menú principal
-python3 -m unittest -v       # pruebas (≈ 12 s)
+python3 main.py                  # menú principal
+python3 -m unittest              # pruebas (36, ≈ 12 s)
+python3 -m gato.experimentos     # tablas de resultados del informe (Markdown)
 ```
+
+Documentación: `DOCUMENTACION.md` (implementación línea por línea de Minimax y alfa-beta, y de la
+búsqueda) y `informe/` (borrador del informe y guion de la presentación).
+
+**Herramientas de apoyo declaradas:** se usó Claude Code (asistente de IA de Anthropic) para
+ayudar a escribir y documentar el código. _(Ajustar a lo que realmente use el grupo.)_
+
+La primera parte del proyecto: un juego de gato en la terminal contra una máquina que
+decide con el algoritmo **Minimax**, y que **muestra su razonamiento modelándolo como un árbol de
+juego**. Incluye además la **poda alfa-beta** para comparar cuánto trabajo se ahorra.
 
 ## Contenido del menú
 
@@ -19,6 +38,7 @@ python3 -m unittest -v       # pruebas (≈ 12 s)
 | 2. Animación | Recorre paso a paso el árbol de una posición pequeña: cómo se baja a las hojas y cómo los valores *suben* hasta la raíz. Con o sin poda. |
 | 3. Estadísticas | Enumera el árbol **completo** del gato: nodos por nivel, partidas posibles, victorias/empates. |
 | 4. Comparar | Minimax vs. alfa-beta en varias posiciones, y el árbol podado con sus ramas descartadas (`✂`). |
+| 5. Gato en movimiento | Elegir un caso y DFS / BFS / costo uniforme / A\*; muestra solución, costo, pasos, nodos expandidos, memoria y tiempo; compara los 4 algoritmos y las heurísticas de A\*. |
 
 ---
 
@@ -196,7 +216,8 @@ heurística, por lo que el ahorro podría ser aún mayor con un mejor orden).
 
 ## 6. ¿Por qué la máquina nunca pierde?
 
-Porque Minimax supone un rival perfecto. Como el valor de la raíz del gato es 0, la máquina
+(Con la profundidad por defecto, hasta el final de la partida; con una profundidad límite baja la
+máquina sí puede perder, porque no ve toda la partida.) Porque Minimax supone un rival perfecto. Como el valor de la raíz del gato es 0, la máquina
 siempre puede asegurar al menos el empate, y en cuanto el rival se equivoca, el árbol le muestra
 una rama con valor positivo y la toma. Las pruebas lo verifican **exhaustivamente**: prueban todas
 las jugadas posibles del humano, jugando la máquina como X y como O, y ninguna partida la derrota.
@@ -211,9 +232,14 @@ gato/
   minimax.py            Minimax y alfa-beta (una sola función recursiva con poda opcional)
   animacion.py          reproduce la búsqueda paso a paso (usa los eventos del algoritmo)
   estadisticas.py       enumeración del árbol completo y comparación Minimax vs. alfa-beta
-  juego.py              partida humano vs. máquina
+  juego.py              partida humano vs. máquina (con profundidad límite configurable)
+  movil.py              problema "Gato en movimiento": estados, acciones, costos, meta, heurísticas
+  busqueda.py           DFS, BFS, costo uniforme y A* (genéricos) + medición de tiempo y memoria
+  solitario.py          interfaz de consola del Gato en movimiento
+  experimentos.py       genera las tablas del informe
   consola.py            colores ANSI, entrada, pantalla
-tests/test_minimax.py   17 pruebas unittest
+tests/test_minimax.py   23 pruebas de Minimax, alfa-beta y profundidad límite
+tests/test_busqueda.py  13 pruebas de DFS/BFS/UCS/A* y de las heurísticas
 arboles/                árboles exportados desde el juego (se crea al exportar)
 ```
 
@@ -226,3 +252,41 @@ Detalles de implementación que conviene saber:
   pero solo se **guardan** los primeros 3 niveles (`prof_arbol`), por eso en ese caso no se puede
   exportar el árbol completo. Con 8 o menos casillas libres (≈ 60 mil nodos o menos) el árbol se guarda entero.
 - Los árboles exportados con `e` quedan en `arboles/arbol_<timestamp>.txt`.
+
+## 8. Gato en movimiento (DFS, BFS, costo uniforme y A\*)
+
+Tablero N×N con **k fichas X móviles** y algunas **O fijas** (obstáculos). Cada jugada mueve una X
+a una casilla vecina libre (8 direcciones). **Meta:** que las k fichas X formen una línea (fila,
+columna o diagonal). No es un laberinto: la meta es un patrón de varias fichas, no una casilla.
+
+| Elemento | Definición |
+|---|---|
+| Estado | `frozenset` con las casillas ocupadas por X (las O y N son fijas por caso) |
+| Acciones | `(origen, destino)`: una X a una casilla vecina sin X ni O |
+| Costo | paso recto = 2, paso en diagonal = 3 |
+| Meta | las X ocupan exactamente una línea de k casillas sin O |
+
+Los casos de prueba están en `gato/movil.py` (`CASOS`). El caso 2 está elegido para que **BFS (menos
+pasos) y UCS (menor costo) den soluciones distintas**.
+
+**Frontera de cada algoritmo** (`gato/busqueda.py`): DFS pila, BFS cola, UCS y A\* cola de
+prioridad (`heapq`). Todos descartan estados repetidos con un conjunto de explorados.
+
+**Heurística propia de A\*** (`ProblemaMovil.heuristica`): para cada línea posible se asignan las
+fichas a sus casillas del modo más barato (distancia con costos 2 y 3, ignorando que las fichas
+se estorben) y se toma la mejor línea. Es admisible y consistente; la prueba está en
+`DOCUMENTACION.md` y las pruebas la verifican en **todos** los estados de los casos pequeños. También
+hay una heurística más simple (`heuristica_simple`) para compararlas.
+
+## 9. Profundidad límite y función de evaluación (Minimax)
+
+Al jugar se puede fijar una **profundidad límite** (1-9). Al llegar a ella el nodo no se expande
+(se marca `CORTE` en el árbol) y se valora con `minimax.evaluacion()`:
+
+- línea abierta con solo fichas de la IA: +1 (una ficha) o +10 (dos); del rival: −1 o −10;
+- +1 si la IA tiene el centro; el total se divide entre 100.
+
+Así la evaluación siempre queda en (−1, 1) y nunca supera una victoria o derrota real
+(que valen al menos 1 en valor absoluto). La poda alfa-beta funciona igual con el límite y da la
+misma jugada que Minimax en cada profundidad (hay pruebas para esto). `python3 -m gato.experimentos`
+muestra los nodos con y sin poda para varias profundidades.

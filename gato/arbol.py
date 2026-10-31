@@ -16,7 +16,7 @@ class Nodo:
     movimiento: int | None      # jugada que llevó a este nodo (None en la raíz)
     turno: str                  # jugador al que le toca mover en este nodo
     profundidad: int
-    tipo: str = ""              # 'MAX', 'MIN', 'HOJA' (terminal) o 'PODA' (no evaluado)
+    tipo: str = ""              # 'MAX', 'MIN', 'HOJA' (terminal), 'CORTE' (profundidad límite) o 'PODA'
     valor: int | None = None    # valor minimax que este nodo "sube" a su padre
     hijos: list = field(default_factory=list)
     elegido: int | None = None  # jugada hija con mejor valor
@@ -35,12 +35,14 @@ def contar_nodos(raiz):
     return 1 + sum(contar_nodos(h) for h in raiz.hijos)
 
 
-def _fmt_valor(v):
-    """Formatea un valor: +3, -2, 0, +∞, -∞ o ? (sin calcular)."""
+def fmt_valor(v):
+    """Formatea un valor: +3, -2, 0, +∞, -∞ o ? (sin calcular). Los decimales (evaluaciones) con 2 cifras."""
     if v is None:
         return "?"
     if v in (float("inf"), float("-inf")):
         return "+∞" if v > 0 else "-∞"
+    if isinstance(v, float):
+        return f"{v:+.2f}"
     return f"{v:+d}" if v else "0"
 
 
@@ -49,6 +51,8 @@ def _etiqueta(n):
     if n.tipo == "HOJA":
         g = ganador(n.tablero)
         return "HOJA", f"gana {g}" if g else "empate"
+    if n.tipo == "CORTE":
+        return "CORTE", "evaluación heurística"
     return (f"{n.tipo}({n.turno})" if n.tipo else "?"), ""
 
 
@@ -70,17 +74,17 @@ def imprimir_arbol(raiz, prof_max=2, solo_mejor=False, visible=None, valores=Non
         if n.podado:
             ab = ""
             if n.alfa is not None:
-                ab = f"  (β={_fmt_valor(n.beta)} ≤ α={_fmt_valor(n.alfa)})"
+                ab = f"  (β={fmt_valor(n.beta)} ≤ α={fmt_valor(n.alfa)})"
             return color(f"✂ mov={n.movimiento}  podado{ab}", "gris")
         tipo, extra = _etiqueta(n)
-        tcolor = {"MAX": "cian", "MIN": "magenta", "HOJA": "amarillo"}.get(n.tipo, "gris")
+        tcolor = {"MAX": "cian", "MIN": "magenta", "HOJA": "amarillo", "CORTE": "azul"}.get(n.tipo, "gris")
         v = valores.get(id(n)) if animando else n.valor
         mov = f"mov={n.movimiento}" if n.movimiento else "raíz"
-        partes = [color(f"[{tipo}]", tcolor), mov, f"v={_fmt_valor(v)}", dibujar_mini(n.tablero)]
+        partes = [color(f"[{tipo}]", tcolor), mov, f"v={fmt_valor(v)}", dibujar_mini(n.tablero)]
         if extra:
             partes.append(extra)
-        if mostrar_ab and n.alfa is not None and n.tipo != "HOJA":
-            partes.append(color(f"α={_fmt_valor(n.alfa)} β={_fmt_valor(n.beta)}", "gris"))
+        if mostrar_ab and n.alfa is not None and n.tipo not in ("HOJA", "CORTE"):
+            partes.append(color(f"α={fmt_valor(n.alfa)} β={fmt_valor(n.beta)}", "gris"))
         return "  ".join(partes)
 
     def hijos_visibles(n, en_pv):

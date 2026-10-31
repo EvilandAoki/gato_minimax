@@ -4,7 +4,7 @@ import time
 from pathlib import Path
 
 from .animacion import animar, puede_animar
-from .arbol import contar_nodos, exportar_arbol, imprimir_arbol
+from .arbol import contar_nodos, exportar_arbol, fmt_valor, imprimir_arbol
 from .consola import color, limpiar, pedir, titulo
 from .minimax import alfabeta, minimax
 from .tablero import (aplicar, dibujar, esta_lleno, ganador, movimientos_validos,
@@ -33,27 +33,29 @@ def _pedir_jugada(tablero, humano):
         print(color("  Casilla no válida.", "rojo"))
 
 
-def _explicar_ia(tablero, ia, jugada_previa=None):
+def _explicar_ia(tablero, ia, prof_max=None):
     """Hace pensar a la IA, muestra su razonamiento y devuelve el Resultado de minimax.
 
     Corre Minimax puro (guardando el árbol) y alfa-beta (sin árbol) solo para comparar
     cuántos nodos se habría ahorrado. La jugada que se juega es la de Minimax.
-    Lo llama jugar() en cada turno de la máquina."""
+    `prof_max` es la profundidad límite (None = hasta el final); con límite, los nodos de corte
+    se valoran con minimax.evaluacion(). Lo llama jugar() en cada turno de la máquina."""
     prof_arbol = PROF_ARBOL_VACIO if len(movimientos_validos(tablero)) == 9 else None
     t0 = time.perf_counter()
-    res = minimax(tablero, ia, construir_arbol=True, prof_arbol=prof_arbol)
+    res = minimax(tablero, ia, construir_arbol=True, prof_arbol=prof_arbol, prof_max=prof_max)
     dt = (time.perf_counter() - t0) * 1000
-    ab = alfabeta(tablero, ia, construir_arbol=False)
+    ab = alfabeta(tablero, ia, construir_arbol=False, prof_max=prof_max)
 
     print(color(f"\n🤖 La máquina ({ia}) evaluó {_miles(res.nodos)} nodos en {dt:.0f} ms "
                 f"con Minimax.", "negrita"))
     print(color(f"   Con poda alfa-beta habría evaluado {_miles(ab.nodos)} "
                 f"({100 * (1 - ab.nodos / res.nodos):.1f}% menos) y elegido la misma jugada "
                 f"({ab.mejor_mov}).", "gris"))
-    print("\n   Valor Minimax de cada jugada posible (+ gano, 0 empato, − pierdo):")
+    print("\n   Valor Minimax de cada jugada posible (+ gano, 0 empato, − pierdo"
+          + (f"; |valor| < 1 = estimación a profundidad {prof_max}):" if prof_max else "):"))
     for h in res.raiz.hijos:
         marca = color("  ◀ elegida", "verde", "negrita") if h.movimiento == res.mejor_mov else ""
-        v = f"{h.valor:+d}" if h.valor else " 0"
+        v = fmt_valor(h.valor).rjust(5)
         print(f"     casilla {h.movimiento}:  {v}{marca}")
     return res
 
@@ -105,6 +107,8 @@ def jugar():
         print("Opción no válida.")
         return
     humano, ia = r, oponente(r)
+    d = pedir("Profundidad límite de la máquina (1-9, Enter=9 = hasta el final): ")
+    prof_max = int(d) if d.isdigit() and 1 <= int(d) < 9 else None
     tablero = tablero_vacio()
 
     while not (ganador(tablero) or esta_lleno(tablero)):
@@ -116,7 +120,7 @@ def jugar():
             tablero = aplicar(tablero, jugada, humano)
         else:
             antes = tablero
-            res = _explicar_ia(tablero, ia)
+            res = _explicar_ia(tablero, ia, prof_max)
             tablero = aplicar(tablero, res.mejor_mov, ia)
             print(f"\n   Resultado: la máquina juega en la casilla {res.mejor_mov}.")
             print("\n" + dibujar(tablero, resaltar=res.mejor_mov))
@@ -125,7 +129,12 @@ def jugar():
     print("\n" + dibujar(tablero) + "\n")
     g = ganador(tablero)
     if g == humano:
-        print(color("¡Ganaste! (Esto no debería pasar: ¿encontraste un bug?)", "verde", "negrita"))
+        if prof_max:
+            print(color("¡Ganaste! Con profundidad límite la máquina no ve toda la partida.",
+                        "verde", "negrita"))
+        else:
+            print(color("¡Ganaste! (Esto no debería pasar: ¿encontraste un bug?)",
+                        "verde", "negrita"))
     elif g == ia:
         print(color("Ganó la máquina.", "rojo", "negrita"))
     else:

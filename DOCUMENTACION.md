@@ -17,8 +17,12 @@ variables de `minimax.py`, el objeto `ctx` y cómo funciona la poda alfa-beta so
 | `gato/juego.py` | Partida humano vs. máquina (opción 1). |
 | `gato/animacion.py` | Reproducción paso a paso de la búsqueda (opción 2). |
 | `gato/estadisticas.py` | Conteo del árbol completo (opción 3) y comparación Minimax vs. alfa-beta (opción 4). |
+| `gato/movil.py` | Problema "Gato en movimiento" (un agente): estado, acciones, costos, meta y heurísticas (sección 9). |
+| `gato/busqueda.py` | DFS, BFS, costo uniforme y A\*, genéricos sobre cualquier problema (sección 10). |
+| `gato/solitario.py` | Interfaz de consola del Gato en movimiento (opción 5). |
+| `gato/experimentos.py` | Genera las tablas del informe: `python3 -m gato.experimentos`. |
 | `gato/consola.py` | Colores ANSI, limpiar pantalla, leer entrada. |
-| `tests/test_minimax.py` | Pruebas (17). Ejecutar: `python3 -m unittest discover`. |
+| `tests/` | 36 pruebas (`test_minimax.py` 23, `test_busqueda.py` 13). Ejecutar: `python3 -m unittest`. |
 
 ### Quién llama a quién
 
@@ -118,6 +122,7 @@ las llamadas recursivas** de `_evaluar`. Tiene dos tipos de campos:
 | `prof_arbol` | config | Hasta qué profundidad se guardan nodos (99 = todos). Con el tablero vacío el juego usa 3 porque el árbol completo tiene 549.946 nodos |
 | `poda` | config | **`True` = alfa-beta, `False` = Minimax puro.** Es el *único* interruptor entre los dos algoritmos |
 | `callback` | config | Función que se avisa en cada evento (la animación la usa para grabar la búsqueda) |
+| `prof_max` | config | Profundidad límite de la búsqueda (99 = sin límite). Al llegar se usa `evaluacion()` (sección 8) |
 | `nodos` | **estado mutable** | Contador global de nodos evaluados |
 
 ¿Por qué un objeto y no variables sueltas? Dos razones:
@@ -156,15 +161,17 @@ Variables locales importantes:
 
 1. **Contar** el nodo (`ctx.nodos += 1`).
 2. **¿Terminal?** (alguien ganó o tablero lleno) → calcular `utilidad`, marcar el nodo `HOJA`, devolver.
-3. **Si no**, decidir si es MAX o MIN, y poner `mejor` en ±INF.
-4. **Por cada jugada legal**: crear el tablero hijo, **llamarse recursivamente** pasando los
+3. **¿Profundidad límite?** (`prof >= ctx.prof_max`) → valorar con `evaluacion()`, marcar el nodo `CORTE`, devolver.
+   Con `prof_max=None` este paso nunca se activa.
+4. **Si no**, decidir si es MAX o MIN, y poner `mejor` en ±INF.
+5. **Por cada jugada legal**: crear el tablero hijo, **llamarse recursivamente** pasando los
    `alfa`/`beta` actuales, y con el valor `v` que vuelve:
    - MAX: si `v > mejor` → actualizar `mejor` y `mejor_mov`; si `mejor > alfa` → `alfa = mejor`.
    - MIN: si `v < mejor` → actualizar; si `mejor < beta` → `beta = mejor`.
    - **Si `ctx.poda and alfa >= beta` → podar** (sección 5) y salir del bucle.
-5. **Cierre**: guardar en el nodo `valor`, `elegido`, `alfa`, `beta`, `sub`, y devolver `mejor`.
+6. **Cierre**: guardar en el nodo `valor`, `elegido`, `alfa`, `beta`, `sub`, y devolver `mejor`.
 
-Sin poda, el paso 4 nunca hace `break`, y se recorre el árbol entero: eso es Minimax puro.
+Sin poda, el paso 5 nunca hace `break`, y se recorre el árbol entero: eso es Minimax puro.
 
 ### 4.5 Eventos del `callback`
 
@@ -174,6 +181,7 @@ Solo si hay `callback` (la animación). Cada evento se emite con `(nombre, nodo,
 |---|---|
 | `entrar` | Al llegar a un nodo (antes de mirar a sus hijos) |
 | `hoja` | Al evaluar un terminal (justo después de `entrar`) |
+| `corte` | Al llegar a la profundidad límite (justo después de `entrar`) |
 | `poda` | Cuando `alfa >= beta` corta el bucle |
 | `subir` | Al terminar un nodo interno y devolver su valor al padre |
 
@@ -304,4 +312,130 @@ entrar ──► (¿terminal?) ──sí──► hoja ──► devuelve utilid
               │                       (poda activa y alfa ≥ beta) ──► poda ──► break
               ▼
            subir ──► devuelve `mejor` al padre
+```
+
+---
+
+## 8. Profundidad límite y función de evaluación
+
+El gato es tan pequeño que Minimax llega siempre al final de la partida. En juegos grandes eso es
+imposible, así que se **corta la búsqueda a una profundidad `prof_max`** y se *estima* el valor del
+tablero con una función de evaluación. Se activa con `minimax(t, prof_max=d)` o `alfabeta(t, prof_max=d)`
+(el juego lo pregunta al empezar). `prof_max=None` = sin límite, como antes.
+
+`evaluacion(t, ia)` (en `minimax.py`) recorre las 8 `LINEAS_GANADORAS` y suma:
+
+| Línea | Aporte |
+|---|---|
+| solo fichas de la IA: una / dos | +1 / +10 |
+| solo fichas del rival: una / dos | −1 / −10 |
+| fichas de ambos (nadie puede completarla) | 0 |
+| casilla central de la IA | +1 |
+
+El total (entre −80 y +81) se divide entre 100. **Por qué:** una victoria real vale `10 - prof` (al
+menos 1 en la profundidad 9); si la estimación pudiera valer más, la IA preferiría una posición "que
+parece buena" a ganar de verdad. Con `|evaluacion| < 1` las victorias y derrotas siempre dominan (hay
+una prueba que lo verifica en todas las posiciones alcanzables). La poda alfa-beta no cambia: los
+nodos `CORTE` son hojas con un valor decimal. Con límite baja la calidad de juego (la máquina puede
+perder), con límite 9 vuelve a ser perfecta.
+
+---
+
+## 9. Gato en movimiento (`movil.py`): el problema de un agente
+
+Formulación como espacio de estados (`ProblemaMovil`, interfaz que usa `busqueda.py`):
+
+| Elemento | Definición | Dónde |
+|---|---|---|
+| Estado | `frozenset` de las casillas (0..N²−1) con X. Las O y N son fijas por caso; un `frozenset` es hashable (sirve para `explorados`) e inmutable | `estado_inicial` |
+| Acciones | `(origen, destino)`: una X a una casilla vecina (8 direcciones) sin X ni O | `acciones(s)` |
+| Transición | `(s − {origen}) ∪ {destino}` | `resultado(s, a)` |
+| Costo | recto = 2, diagonal = 3 (si todo costara igual, BFS = UCS) | `costo(s, a)` |
+| Meta | las X ocupan exactamente una línea de k casillas sin O | `es_meta(s)` |
+
+Las líneas válidas (`lineas`) se calculan una vez: todas las ventanas de k casillas seguidas en filas,
+columnas y diagonales que no contengan una O. Los casos de prueba (`CASOS`) son 4: 3×3, dos de 4×4 y
+5×5. El caso 2 se encontró buscando uno donde BFS y UCS difieren (mismo número de pasos, 14 contra 10
+de costo). El problema **no es un laberinto**: la meta no es una casilla sino un patrón de varias
+fichas que se mueven a la vez.
+
+### Heurística h1 (la que usa A\*)
+`h1(s) = mín sobre las líneas válidas L de [ mín sobre las asignaciones ficha→casilla de L de Σ d(ficha, casilla) ]`,
+con `d(a, b) = 3·mín(dx, dy) + 2·|dx − dy|` (distancia octil: todas las diagonales posibles a 3 y el
+resto en recto a 2). Como k ≤ 4, las asignaciones se prueban todas (k! ≤ 24).
+
+Ejemplo (caso 1, `X.X/.O./X.O`, X en 1, 3 y 7): la única línea libre de O es la columna izquierda
+(1, 4, 7) y la fila superior (1, 2, 3). Para la fila superior las fichas ya ocupan 1 y 3 y la de 7 debe
+llegar a 2: `d(7, 2) = 3·1 + 2·1 = 5`. Para la columna izquierda la ficha de 3 debe llegar a 4:
+`d(3, 4) = 3·1 + 2·1 = 5`. Entonces `h1 = 5`, y el costo óptimo real es 5.
+
+- **Admisible** (nunca sobreestima): `d` es el costo exacto de mover una ficha en un tablero vacío.
+  Las fichas reales además se estorban y no pueden compartir casilla, lo que solo puede *subir* el costo.
+  Además, la meta exige que las X ocupen una línea, así que la mejor asignación a alguna línea es una
+  cota inferior de cualquier solución.
+- **Consistente** (`h(s) ≤ c + h(s')` para toda jugada): una jugada mueve una sola ficha, con costo
+  `c = d(origen, destino)` (2 recto, 3 diagonal, coincide con la distancia octil de un paso). Por la
+  desigualdad triangular, `d(destino, q) ≥ d(origen, q) − c` para cualquier casilla `q`, así que para
+  *cada* asignación la suma baja como mucho `c` en `s'`; al tomar el mínimo sobre asignaciones y
+  líneas se conserva la desigualdad.
+- Las pruebas (`tests/test_busqueda.py`) lo verifican por fuerza bruta en todos los estados alcanzables
+  de los casos 1-3, comparando con el costo exacto a la meta.
+
+### Heurística h2 (más débil, para comparar)
+`h2(s) = 2 × (casillas de la mejor línea que aún no tienen X)`. También es admisible (cada jugada llena
+a lo más una casilla y cuesta ≥ 2) y consistente, pero ignora las distancias. En el caso 5×5 A\* con h1
+expande 475 nodos, con h2 4.176 y UCS 8.060. Pero h1 es más cara de calcular (probar permutaciones): en
+tiempo real A\* con h1 tarda más en el caso grande (≈ 1,1 s contra 0,13 s de UCS), aunque expande 17
+veces menos nodos. Es un buen punto de discusión para el informe: menos nodos no siempre significa menos tiempo.
+
+---
+
+## 10. Búsqueda: DFS, BFS, UCS y A\* (`busqueda.py`)
+
+Los cuatro comparten el esqueleto (frontera + `explorados`); cambia la frontera:
+
+| Algoritmo | Frontera | Sale primero | Prueba de meta | Garantía |
+|---|---|---|---|---|
+| `dfs` | pila (`list`, LIFO) | el último que entró | al generar | solo encuentra *una* solución |
+| `bfs` | cola (`deque`, FIFO) | el primero que entró | al generar | menos pasos |
+| `ucs` | cola de prioridad (`heapq`) por `g` | menor costo acumulado | al sacar | menor costo |
+| `astar` | cola de prioridad por `g + h` | menor `g + h` estimado | al sacar | menor costo si `h` es admisible |
+
+UCS y A\* comparten `_mejor_primero(problema, nombre, prioridad)`; solo cambia la función `prioridad`
+(`g` o `g + h`). Detalles que conviene saber:
+
+- **`NodoBusqueda`**: `estado`, `padre`, `accion`, `g` (costo acumulado) y `prof` (pasos). `camino()`
+  sigue los `padre` hasta la raíz.
+- **Estados repetidos**: `explorados` (DFS, UCS, A\*) o `vistos` (BFS, que marca al encolar). Sin esto
+  DFS no termina en un grafo con ciclos (mover una ficha y volverla).
+- **UCS/A\* y entradas obsoletas**: `heapq` no permite cambiar la prioridad de un elemento. Si se halla
+  un camino más barato a un estado ya encolado, se encola otra vez y la entrada vieja se ignora al
+  sacarla (`if nodo.estado in explorados: continue`). `mejor_g` evita encolar caminos peores.
+- **Desempate**: la tupla del heap lleva un contador, porque `NodoBusqueda` no se puede comparar.
+- **Por qué la meta se prueba al sacar (UCS/A\*)**: al generarla solo se sabe *un* camino; al sacarla se
+  sabe que ninguno pendiente es más barato. BFS y DFS pueden probarla al generar.
+- **Métricas** (`ResultadoBusqueda`): `expandidos` (nodos a los que se les generaron sucesores; la meta
+  no cuenta), `generados`, `max_memoria` (máximo de |frontera| + |explorados|), `pico_bytes` (pico de
+  memoria de Python con `tracemalloc`), `tiempo_ms`.
+- **`medir()`** ejecuta el algoritmo dos veces: una para el tiempo y otra con `tracemalloc` para la
+  memoria (`tracemalloc` ralentiza mucho y falsearía el tiempo).
+
+### Propiedades (para el informe)
+`b` = factor de ramificación, `d` = profundidad de la solución más superficial, `m` = profundidad máxima.
+En este problema el espacio es finito y se controlan repetidos, así que todos son completos.
+
+| | Completo | Óptimo | Tiempo | Espacio |
+|---|---|---|---|---|
+| DFS | sí (con `explorados`, espacio finito) | no | O(b^m) | O(b·m) en árbol; con `explorados` crece con los estados vistos |
+| BFS | sí | en pasos (no en costo) | O(b^d) | O(b^d) |
+| UCS | sí (costos ≥ 2 > 0) | sí (en costo) | O(b^(1+C\*/ε)) | ídem |
+| A\* | sí | sí con h admisible (y consistente: no reabre estados) | depende de h; exponencial en el peor caso | O(b^d), guarda todos los nodos |
+
+### Quién llama a quién (búsqueda)
+```
+main.main() → 5 → solitario.menu_movil()
+   ├─ _elegir_caso()  (movil.CASOS)
+   ├─ ejecutar_algoritmo() → busqueda.medir(dfs|bfs|ucs|astar) → problema.acciones/resultado/costo/es_meta/heuristica
+   ├─ comparar_algoritmos()   (tabla de los 4)
+   └─ comparar_heuristicas()  (UCS vs A* con h2 vs A* con h1)
 ```
