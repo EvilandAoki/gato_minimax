@@ -259,7 +259,7 @@ justamente lo que se explica en la presentación sobre en qué se diferencian la
 | UCS | 5→9 (2), 8→12 (2), 9→13 (2), 10→14 (2), 12→16 (2) | 5 | **10** |
 
 Las dos hallan una solución de 5 pasos (el mínimo posible). BFS se queda con la primera que encuentra, que
-casualmente usa tres diagonales (cada una cuesta 3); UCS encuentra la de cinco pasos rectos (cada uno cuesta 2).
+usa cuatro diagonales (cada una cuesta 3) y un solo paso recto; UCS encuentra la de cinco pasos rectos (cada uno cuesta 2).
 Esto demuestra con datos que **minimizar pasos no es minimizar costo**, que es lo que la rúbrica de UCS quiere ver.
 `test_caso_donde_bfs_y_ucs_difieren` fija este resultado (14 contra 10, mismos pasos).
 
@@ -525,7 +525,7 @@ Hay **36 pruebas** (`python3 -m unittest`), todas pasan. Resumen de lo que garan
 |---|---|
 | Tablero (3) | Las 8 líneas, empate sin ganador, turno deducido y aplicar jugada |
 | Árbol completo (2) | 549.946 nodos y nodos por nivel conocidos |
-| Minimax (7) | Gato perfecto = empate; gana de inmediato; bloquea; prefiere ganar rápido; árbol guardado consistente |
+| Minimax (6) | Gato perfecto = empate; gana de inmediato; bloquea; prefiere ganar rápido; árbol guardado consistente |
 | Alfa-beta (3) | Misma jugada y valor que Minimax en posiciones de comparación y en **todas** las posiciones con ≤ 6 casillas libres |
 | IA como X y como O (3) | La máquina nunca pierde contra ninguna jugada humana posible, jugando como X y como O |
 | Profundidad límite (6) | `\|evaluacion\| < 1` en todas las posiciones; `prof_max=None` equivale a 9; alfa-beta igual a Minimax en cada profundidad; cortes marcados como `CORTE`; bloquea con profundidad 2 |
